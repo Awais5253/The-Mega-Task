@@ -155,7 +155,7 @@ def init_db():
         ''')
         cur.execute("ALTER TABLE referral_earnings ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
         
-        # Sync initial base count for existing users
+        # Sync initial base count for existing users (so old users stats don't start at 0)
         cur.execute("""
             UPDATE users u SET
                 approved_tasks_count = COALESCE((SELECT COUNT(*) FROM tasks WHERE user_id = u.id AND status = 'Approved'), u.approved_tasks_count),
@@ -203,245 +203,53 @@ def generate_random_task(user_id):
 def ping():
     return "OK", 200
 
-# SINGLE MAIN ROUTE - ALWAYS KEEPS URL AS themegatask.com
 @app.route('/')
 def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-        
-    active_tab = session.get('active_tab', 'home')
-    user_id = session['user_id']
-    cleanup_old_records()
-
-    if active_tab == 'tasks':
-        with db_cursor() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                DELETE FROM tasks 
-                WHERE user_id = %s AND status = 'active' 
-                AND created_at < NOW() - INTERVAL '30 minutes'
-            """, (user_id,))
-            cur.execute("SELECT gid, name, dob_year, email, password, price FROM tasks WHERE user_id = %s AND status = 'active'", (user_id,))
-            active_row = cur.fetchone()
-            cur.close()
-        active_task = None
-        if active_row:
-            active_task = {
-                'gid': active_row[0], 'name': active_row[1], 'dob_year': active_row[2],
-                'email': active_row[3], 'password': active_row[4], 'price': active_row[5]
-            }
-        return render_template('tasks.html', active_task=active_task)
-
-    elif active_tab == 'referrals':
-        with db_cursor() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT id, full_name, balance, COALESCE(lifetime_ref_earned, 0) FROM users WHERE id = %s", (user_id,))
-            user_row = cur.fetchone()
-            cur.execute("SELECT COUNT(*) FROM users WHERE referred_by = %s", (user_id,))
-            total_referrals = cur.fetchone()[0]
-            ref_earnings = float(user_row[3]) if user_row and user_row[3] else 0.0
-            cur.execute("""
-                SELECT u.full_name, COALESCE(SUM(re.amount), 0) as earned_lifetime
-                FROM users u
-                LEFT JOIN referral_earnings re ON re.referred_user_id = u.id AND re.referrer_id = %s 
-                WHERE u.referred_by = %s GROUP BY u.id, u.full_name ORDER BY u.id DESC
-            """, (user_id, user_id))
-            ref_rows = cur.fetchall()
-            cur.close()
-        referrals_list = [{'username': r[0], 'earned_30d': r[1]} for r in ref_rows]
-        user_info = [user_row[0], user_row[1], user_row[2]]
-        display_id = user_row[0] + 100
-        return render_template('referrals.html', user=user_info, display_id=display_id, total_referrals=total_referrals, ref_earnings=ref_earnings, referrals_list=referrals_list)
-
-    elif active_tab == 'wallet':
-        with db_cursor() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
-            balance = cur.fetchone()[0]
-            cur.execute("""
-                SELECT method, account_number, amount, status,
-                       COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A')
-                FROM withdrawals WHERE user_id = %s ORDER BY created_at DESC LIMIT 6
-            """, (user_id,))
-            withdrawals = cur.fetchall()
-            cur.close()
-        return render_template('wallet.html', balance=balance, withdrawals=withdrawals)
-
-    elif active_tab == 'profile':
-        with db_cursor() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT full_name, whatsapp, 
-                       COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD Mon YYYY'), 'N/A'),
-                       COALESCE(approved_tasks_count, 0), COALESCE(lifetime_task_earned, 0),
-                       COALESCE(lifetime_ref_earned, 0), COALESCE(lifetime_withdrawn, 0)
-                FROM users WHERE id = %s
-            """, (user_id,))
-            u_row = cur.fetchone()
-            cur.close()
-        user_name = u_row[0] if u_row else ''
-        user_phone = u_row[1] if u_row else ''
-        joining_date = u_row[2] if u_row else ''
-        display_user_id = user_id + 100
-        approved_tasks = u_row[3] if u_row else 0
-        task_earned = float(u_row[4]) if u_row else 0.0
-        ref_earned = float(u_row[5]) if u_row else 0.0
-        total_earned = task_earned + ref_earned
-        total_withdrawn = float(u_row[6]) if u_row else 0.0
-        return render_template('profile.html', user_id=display_user_id, user_name=user_name, user_phone=user_phone, joining_date=joining_date, total_earned=total_earned, total_withdrawn=total_withdrawn, approved_tasks=approved_tasks)
-
-    elif active_tab == 'account-history':
-        with db_cursor() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT gid, email, status, price,
-                       COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A')
-                FROM tasks WHERE user_id = %s AND status != 'active' 
-                ORDER BY (CASE WHEN status = 'pending' THEN 1 ELSE 2 END), created_at DESC
-            """, (session['user_id'],))
-            activity_rows = cur.fetchall()
-            cur.close()
-        history = [{'gid': r[0], 'email': r[1], 'status': r[2], 'price': r[3], 'date_time': r[4]} for r in activity_rows]
-        return render_template('account_history.html', history=history)
-
-    elif active_tab == 'withdraw-history':
-        with db_cursor() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT method, account_number, amount, status,
-                       COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A')
-                FROM withdrawals WHERE user_id = %s ORDER BY created_at DESC
-            """, (session['user_id'],))
-            withdrawals = cur.fetchall()
-            cur.close()
-        return render_template('withdraw_history.html', withdrawals=withdrawals)
-
-    # DEFAULT TAB IS HOME
-    with db_cursor() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT full_name, balance, status FROM users WHERE id = %s", (session['user_id'],))
-        user_info = cur.fetchone()
-        cur.execute("""
-            SELECT gid, email, status FROM tasks 
-            WHERE user_id = %s AND status != 'active' 
-            ORDER BY (CASE WHEN status = 'pending' THEN 1 ELSE 2 END), created_at DESC LIMIT 6
-        """, (session['user_id'],))
-        activity_rows = cur.fetchall()
-        cur.close()
-    recent_activities = [{'gid': r[0], 'email': r[1], 'status': r[2]} for r in activity_rows]
-    return render_template('home.html', user=user_info, recent_activities=recent_activities)
-
-# TAB NAVIGATION REDIRECTS (Keeps Address Bar Clean)
-@app.route('/home')
-def home():
-    session['active_tab'] = 'home'
-    return redirect('/')
-
-@app.route('/tasks', methods=['GET', 'POST'])
-def tasks():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    user_id = session['user_id']
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'start_new': generate_random_task(user_id)
-        elif action == 'done':
-            with db_cursor() as conn:
-                cur = conn.cursor()
-                cur.execute("UPDATE tasks SET status = 'pending' WHERE user_id = %s AND status = 'active'", (user_id,))
-                cur.close()
-            session['active_tab'] = 'home'
-            return redirect('/')
-        elif action == 'cancel':
-            with db_cursor() as conn:
-                cur = conn.cursor()
-                cur.execute("DELETE FROM tasks WHERE user_id = %s AND status = 'active'", (user_id,))
-                cur.close()
-    session['active_tab'] = 'tasks'
-    return redirect('/')
-
-@app.route('/referrals')
-def referrals():
-    session['active_tab'] = 'referrals'
-    return redirect('/')
-
-@app.route('/account-history')
-def account_history():
-    session['active_tab'] = 'account-history'
-    return redirect('/')
-
-@app.route('/withdraw-history')
-def withdraw_history():
-    session['active_tab'] = 'withdraw-history'
-    return redirect('/')
-
-@app.route('/profile')
-def profile():
-    session['active_tab'] = 'profile'
-    return redirect('/')
-
-@app.route('/wallet', methods=['GET', 'POST'])
-def wallet():
-    if 'user_id' not in session: return redirect(url_for('login'))
-    user_id = session['user_id']
-    if request.method == 'POST':
-        method = request.form.get('method')
-        account_number = request.form.get('account_number', '').strip()
-        try: amount = float(request.form.get('amount', 0))
-        except ValueError: amount = 0
-        with db_cursor() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
-            user_balance = float(cur.fetchone()[0])
-            cur.close()
-        if method not in ['JazzCash', 'EasyPaisa', 'NayaPay', 'SadaPay', 'UPaisa']:
-            flash("Please select a valid payment method!", "danger")
-        elif not account_number.isdigit() or len(account_number) != 11:
-            flash("Account number must be exactly 11 digits!", "danger")
-        elif amount < 30:
-            flash("Minimum withdrawal amount is PKR 30!", "danger")
-        elif amount > user_balance:
-            flash("Insufficient balance!", "danger")
-        else:
-            with db_cursor() as conn:
-                cur = conn.cursor()
-                cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (amount, user_id))
-                cur.execute("""
-                    INSERT INTO withdrawals (user_id, method, account_number, amount, status)
-                    VALUES (%s, %s, %s, %s, 'pending')
-                """, (user_id, method, account_number, amount))
-                cur.close()
-            flash("Withdrawal request submitted successfully!", "success")
-    session['active_tab'] = 'wallet'
-    return redirect('/')
+    if 'user_id' in session:
+        return redirect(url_for('home'))
+    return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if 'user_id' in session: return redirect('/')
+    if 'user_id' in session:
+        return redirect(url_for('home'))
+        
     ref_param = (request.args.get('ref') or request.form.get('ref') or '').strip()
+    
     ref_db_id = None
     if ref_param.isdigit():
         val = int(ref_param)
         ref_db_id = val - 100 if val > 100 else val
+
     valid_referrer_id = None
     is_valid_ref = False
+
     if ref_param:
         try:
             with db_cursor() as conn:
                 cur = conn.cursor()
-                if ref_db_id is not None: cur.execute("SELECT id FROM users WHERE id = %s LIMIT 1", (ref_db_id,))
-                else: cur.execute("SELECT id FROM users WHERE full_name = %s LIMIT 1", (ref_param,))
+                if ref_db_id is not None:
+                    cur.execute("SELECT id FROM users WHERE id = %s LIMIT 1", (ref_db_id,))
+                else:
+                    cur.execute("SELECT id FROM users WHERE full_name = %s LIMIT 1", (ref_param,))
+                
                 user_row = cur.fetchone()
                 cur.close()
+
                 if user_row:
                     valid_referrer_id = user_row[0]
                     is_valid_ref = True
-        except Exception as e: print("Referrer lookup error:", e)
+        except Exception as e:
+            print("Referrer lookup error:", e)
+
     is_locked = False
     if request.method == 'GET':
-        if ref_param and is_valid_ref: is_locked = True
+        if ref_param and is_valid_ref:
+            is_locked = True
         elif ref_param and not is_valid_ref:
             flash("Invalid Referral Link or Code!", "danger")
             ref_param = ''
+
     if request.method == 'POST':
         full_name = request.form.get('full_name', '').strip()
         whatsapp = request.form.get('whatsapp', '').strip()
@@ -471,13 +279,19 @@ def register():
         try:
             with db_cursor() as conn:
                 cur = conn.cursor()
+                
                 cur.execute("SELECT id FROM users WHERE whatsapp = %s", (whatsapp,))
                 if cur.fetchone():
                     flash("WhatsApp Number already registered!", "danger")
                     cur.close()
                     return render_template('register.html', ref=ref_param, is_locked=is_locked)
-                cur.execute("INSERT INTO users (full_name, whatsapp, password, referred_by) VALUES (%s, %s, %s, %s)", (full_name, whatsapp, password, valid_referrer_id))
+                
+                cur.execute("""
+                    INSERT INTO users (full_name, whatsapp, password, referred_by) 
+                    VALUES (%s, %s, %s, %s)
+                """, (full_name, whatsapp, password, valid_referrer_id))
                 cur.close()
+                
             flash("Registration Successful! Please Login.", "success")
             return redirect(url_for('login'))
         except Exception as e:
@@ -489,23 +303,27 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if 'user_id' in session: return redirect('/')
+    if 'user_id' in session:
+        return redirect(url_for('home'))
+        
     if request.method == 'POST':
         whatsapp = request.form['whatsapp']
         password = request.form['password']
+        
         with db_cursor() as conn:
             cur = conn.cursor()
             cur.execute("SELECT id, full_name, password FROM users WHERE whatsapp = %s", (whatsapp,))
             user = cur.fetchone()
             cur.close()
+        
         if user and user[2] == password:
             session.permanent = True
             session['user_id'] = user[0]
             session['user_name'] = user[1]
-            session['active_tab'] = 'home'
-            return redirect('/')
+            return redirect(url_for('home'))
         else:
             flash("Invalid WhatsApp Number or Password!", "danger")
+            
     return render_template('login.html')
 
 @app.route('/logout')
@@ -513,32 +331,342 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+@app.route('/home')
+def home():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    cleanup_old_records()
+    
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        
+        cur.execute("SELECT full_name, balance, status FROM users WHERE id = %s", (session['user_id'],))
+        user_info = cur.fetchone()
+        
+        cur.execute("""
+            SELECT gid, email, status 
+            FROM tasks 
+            WHERE user_id = %s AND status != 'active' 
+            ORDER BY (CASE WHEN status = 'pending' THEN 1 ELSE 2 END), created_at DESC 
+            LIMIT 6
+        """, (session['user_id'],))
+        
+        activity_rows = cur.fetchall()
+        cur.close()
+    
+    recent_activities = []
+    for row in activity_rows:
+        recent_activities.append({
+            'gid': row[0],
+            'email': row[1],
+            'status': row[2]
+        })
+    
+    return render_template('home.html', user=user_info, recent_activities=recent_activities)
+
+@app.route('/referrals')
+def referrals():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    cleanup_old_records()
+    user_id = session['user_id']
+    
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        
+        cur.execute("SELECT id, full_name, balance, COALESCE(lifetime_ref_earned, 0) FROM users WHERE id = %s", (user_id,))
+        user_row = cur.fetchone()
+        
+        cur.execute("SELECT COUNT(*) FROM users WHERE referred_by = %s", (user_id,))
+        total_referrals = cur.fetchone()[0]
+        
+        # Lifetime total referral earnings
+        ref_earnings = float(user_row[3]) if user_row and user_row[3] else 0.0
+        
+        # Lifetime earnings per referred user (No 30 days restriction)
+        cur.execute("""
+            SELECT u.full_name, COALESCE(SUM(re.amount), 0) as earned_lifetime
+            FROM users u
+            LEFT JOIN referral_earnings re ON re.referred_user_id = u.id 
+                AND re.referrer_id = %s 
+            WHERE u.referred_by = %s
+            GROUP BY u.id, u.full_name
+            ORDER BY u.id DESC
+        """, (user_id, user_id))
+        
+        ref_rows = cur.fetchall()
+        cur.close()
+        
+    referrals_list = []
+    for row in ref_rows:
+        referrals_list.append({
+            'username': row[0],
+            'earned_30d': row[1] # Displaying lifetime total
+        })
+        
+    user_info = [user_row[0], user_row[1], user_row[2]]
+    display_id = user_row[0] + 100
+    
+    return render_template(
+        'referrals.html', 
+        user=user_info, 
+        display_id=display_id,
+        total_referrals=total_referrals, 
+        ref_earnings=ref_earnings, 
+        referrals_list=referrals_list
+    )
+
+@app.route('/account-history')
+def account_history():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    cleanup_old_records()
+    
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT gid, email, status, price,
+                   COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A')
+            FROM tasks 
+            WHERE user_id = %s AND status != 'active' 
+            ORDER BY (CASE WHEN status = 'pending' THEN 1 ELSE 2 END), created_at DESC
+        """, (session['user_id'],))
+        
+        activity_rows = cur.fetchall()
+        cur.close()
+        
+    history = []
+    for row in activity_rows:
+        history.append({
+            'gid': row[0],
+            'email': row[1],
+            'status': row[2],
+            'price': row[3],
+            'date_time': row[4]
+        })
+        
+    return render_template('account_history.html', history=history)
+
+@app.route('/withdraw-history')
+def withdraw_history():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    cleanup_old_records()
+    
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT method, account_number, amount, status,
+                   COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A')
+            FROM withdrawals 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC
+        """, (session['user_id'],))
+        
+        withdrawals = cur.fetchall()
+        cur.close()
+        
+    return render_template('withdraw_history.html', withdrawals=withdrawals)
+
+@app.route('/profile')
+def profile():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    cleanup_old_records()
+    user_id = session['user_id']
+    
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT full_name, whatsapp, 
+                   COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD Mon YYYY'), 'N/A'),
+                   COALESCE(approved_tasks_count, 0),
+                   COALESCE(lifetime_task_earned, 0),
+                   COALESCE(lifetime_ref_earned, 0),
+                   COALESCE(lifetime_withdrawn, 0)
+            FROM users WHERE id = %s
+        """, (user_id,))
+        u_row = cur.fetchone()
+        
+        user_name = u_row[0] if u_row else ''
+        user_phone = u_row[1] if u_row else ''
+        joining_date = u_row[2] if u_row else ''
+        
+        display_user_id = user_id + 100
+        
+        approved_tasks = u_row[3] if u_row else 0
+        task_earned = float(u_row[4]) if u_row else 0.0
+        ref_earned = float(u_row[5]) if u_row else 0.0
+        
+        total_earned = task_earned + ref_earned
+        total_withdrawn = float(u_row[6]) if u_row else 0.0
+        
+        cur.close()
+    
+    return render_template(
+        'profile.html',
+        user_id=display_user_id,
+        user_name=user_name,
+        user_phone=user_phone,
+        joining_date=joining_date,
+        total_earned=total_earned,
+        total_withdrawn=total_withdrawn,
+        approved_tasks=approved_tasks
+    )
+
 @app.route('/change_password', methods=['POST'])
 def change_password():
-    if 'user_id' not in session: return redirect(url_for('login'))
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
     user_id = session['user_id']
     old_password = request.form.get('old_password', '').strip()
     new_password = request.form.get('new_password', '').strip()
+    
     with db_cursor() as conn:
         cur = conn.cursor()
         cur.execute("SELECT password FROM users WHERE id = %s", (user_id,))
         current_db_password = cur.fetchone()[0]
+        
         if current_db_password == old_password:
             cur.execute("UPDATE users SET password = %s WHERE id = %s", (new_password, user_id))
             flash("Password updated successfully!", "success")
         else:
             flash("Incorrect Old Password!", "danger")
         cur.close()
-    session['active_tab'] = 'profile'
-    return redirect('/')
+    
+    return redirect(url_for('profile'))
+
+@app.route('/tasks', methods=['GET', 'POST'])
+def tasks():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_id = session['user_id']
+    
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM tasks 
+            WHERE user_id = %s AND status = 'active' 
+            AND created_at < NOW() - INTERVAL '30 minutes'
+        """, (user_id,))
+        cur.close()
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'start_new':
+            generate_random_task(user_id)
+            return redirect(url_for('tasks'))
+            
+        elif action == 'done':
+            with db_cursor() as conn:
+                cur = conn.cursor()
+                cur.execute("UPDATE tasks SET status = 'pending' WHERE user_id = %s AND status = 'active'", (user_id,))
+                cur.close()
+            return redirect(url_for('home'))
+            
+        elif action == 'cancel':
+            with db_cursor() as conn:
+                cur = conn.cursor()
+                cur.execute("DELETE FROM tasks WHERE user_id = %s AND status = 'active'", (user_id,))
+                cur.close()
+            return redirect(url_for('tasks'))
+
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT gid, name, dob_year, email, password, price FROM tasks WHERE user_id = %s AND status = 'active'", (user_id,))
+        active_row = cur.fetchone()
+        cur.close()
+    
+    active_task = None
+    if active_row:
+        active_task = {
+            'gid': active_row[0],
+            'name': active_row[1],
+            'dob_year': active_row[2],
+            'email': active_row[3],
+            'password': active_row[4],
+            'price': active_row[5]
+        }
+        
+    return render_template('tasks.html', active_task=active_task)
+
+@app.route('/wallet', methods=['GET', 'POST'])
+def wallet():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    cleanup_old_records()
+    user_id = session['user_id']
+    
+    if request.method == 'POST':
+        method = request.form.get('method')
+        account_number = request.form.get('account_number', '').strip()
+        try:
+            amount = float(request.form.get('amount', 0))
+        except ValueError:
+            amount = 0
+            
+        with db_cursor() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
+            user_balance = float(cur.fetchone()[0])
+            cur.close()
+            
+        if method not in ['JazzCash', 'EasyPaisa', 'NayaPay', 'SadaPay', 'UPaisa']:
+            flash("Please select a valid payment method!", "danger")
+        elif not account_number.isdigit() or len(account_number) != 11:
+            flash("Account number must be exactly 11 digits!", "danger")
+        elif amount < 30:
+            flash("Minimum withdrawal amount is PKR 30!", "danger")
+        elif amount > user_balance:
+            flash("Insufficient balance!", "danger")
+        else:
+            with db_cursor() as conn:
+                cur = conn.cursor()
+                cur.execute("UPDATE users SET balance = balance - %s WHERE id = %s", (amount, user_id))
+                cur.execute("""
+                    INSERT INTO withdrawals (user_id, method, account_number, amount, status)
+                    VALUES (%s, %s, %s, %s, 'pending')
+                """, (user_id, method, account_number, amount))
+                cur.close()
+            flash("Withdrawal request submitted successfully!", "success")
+            return redirect(url_for('wallet'))
+
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT balance FROM users WHERE id = %s", (user_id,))
+        balance = cur.fetchone()[0]
+        
+        cur.execute("""
+            SELECT method, account_number, amount, status,
+                   COALESCE(TO_CHAR(created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A')
+            FROM withdrawals 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC LIMIT 6
+        """, (user_id,))
+        withdrawals = cur.fetchall()
+        cur.close()
+        
+    return render_template('wallet.html', balance=balance, withdrawals=withdrawals)
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     cleanup_old_records()
+    
     if request.method == 'POST':
         task_id = request.form.get('task_id')
         withdraw_id = request.form.get('withdraw_id')
         action = request.form.get('action')
+        
         search_task = request.form.get('search_task', '').strip()
         search_withdraw = request.form.get('search_withdraw', '').strip()
         search_user = request.form.get('search_user', '').strip()
@@ -562,29 +690,64 @@ def admin():
                     if row:
                         u_id, price, old_status = row[0], row[1], row[2]
                         is_old_approved = (old_status in ['Approved', 'approved'])
+
                         if action == 'approve':
                             if not is_old_approved:
                                 cur.execute("UPDATE tasks SET status = 'Approved', created_at = CURRENT_TIMESTAMP WHERE id = %s", (task_id,))
-                                cur.execute("UPDATE users SET balance = balance + %s, approved_tasks_count = approved_tasks_count + 1, lifetime_task_earned = lifetime_task_earned + %s WHERE id = %s", (price, price, u_id))
+                                # Update Balance & Permanent Task Stats
+                                cur.execute("""
+                                    UPDATE users SET 
+                                        balance = balance + %s,
+                                        approved_tasks_count = approved_tasks_count + 1,
+                                        lifetime_task_earned = lifetime_task_earned + %s
+                                    WHERE id = %s
+                                """, (price, price, u_id))
+                                
                                 cur.execute("SELECT id FROM referral_earnings WHERE task_id = %s", (task_id,))
                                 if not cur.fetchone():
                                     cur.execute("SELECT referred_by FROM users WHERE id = %s", (u_id,))
                                     ref_row = cur.fetchone()
                                     if ref_row and ref_row[0]:
                                         referrer_id = ref_row[0]
-                                        cur.execute("UPDATE users SET balance = balance + 10, lifetime_ref_earned = lifetime_ref_earned + 10 WHERE id = %s", (referrer_id,))
-                                        cur.execute("INSERT INTO referral_earnings (referrer_id, referred_user_id, task_id, amount) VALUES (%s, %s, %s, 10)", (referrer_id, u_id, task_id))
+                                        # Update Referrer Balance & Permanent Ref Stats
+                                        cur.execute("""
+                                            UPDATE users SET 
+                                                balance = balance + 10,
+                                                lifetime_ref_earned = lifetime_ref_earned + 10
+                                            WHERE id = %s
+                                        """, (referrer_id,))
+                                        cur.execute("""
+                                            INSERT INTO referral_earnings (referrer_id, referred_user_id, task_id, amount)
+                                            VALUES (%s, %s, %s, 10)
+                                        """, (referrer_id, u_id, task_id))
+
                         elif action in ['not_exist', 'reject']:
                             new_status = 'Not Exist' if action == 'not_exist' else 'Rejected'
+                            
                             if is_old_approved:
-                                cur.execute("UPDATE users SET balance = balance - %s, approved_tasks_count = GREATEST(0, approved_tasks_count - 1), lifetime_task_earned = GREATEST(0, lifetime_task_earned - %s) WHERE id = %s", (price, price, u_id))
+                                # Revert Task Balance & Permanent Task Stats
+                                cur.execute("""
+                                    UPDATE users SET 
+                                        balance = balance - %s,
+                                        approved_tasks_count = GREATEST(0, approved_tasks_count - 1),
+                                        lifetime_task_earned = GREATEST(0, lifetime_task_earned - %s)
+                                    WHERE id = %s
+                                """, (price, price, u_id))
+                                
                                 cur.execute("SELECT referrer_id, amount FROM referral_earnings WHERE task_id = %s", (task_id,))
                                 ref_earn = cur.fetchone()
                                 if ref_earn:
                                     referrer_id, ref_amt = ref_earn[0], ref_earn[1]
-                                    cur.execute("UPDATE users SET balance = balance - %s, lifetime_ref_earned = GREATEST(0, lifetime_ref_earned - %s) WHERE id = %s", (ref_amt, ref_amt, referrer_id))
+                                    cur.execute("""
+                                        UPDATE users SET 
+                                            balance = balance - %s,
+                                            lifetime_ref_earned = GREATEST(0, lifetime_ref_earned - %s)
+                                        WHERE id = %s
+                                    """, (ref_amt, ref_amt, referrer_id))
                                     cur.execute("DELETE FROM referral_earnings WHERE task_id = %s", (task_id,))
+                            
                             cur.execute("UPDATE tasks SET status = %s, created_at = CURRENT_TIMESTAMP WHERE id = %s", (new_status, task_id))
+
             elif withdraw_id:
                 cur.execute("SELECT user_id, amount, status FROM withdrawals WHERE id = %s", (withdraw_id,))
                 w_row = cur.fetchone()
@@ -599,6 +762,7 @@ def admin():
                             cur.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (w_amount, w_uid))
                             cur.execute("UPDATE withdrawals SET status = 'Rejected', created_at = CURRENT_TIMESTAMP WHERE id = %s", (withdraw_id,))
             cur.close()
+            
         redirect_args = {}
         if search_task: redirect_args['search_task'] = search_task
         if search_withdraw: redirect_args['search_withdraw'] = search_withdraw
@@ -606,18 +770,23 @@ def admin():
         if task_page: redirect_args['task_page'] = task_page
         if withdraw_page: redirect_args['withdraw_page'] = withdraw_page
         if user_page: redirect_args['user_page'] = user_page
-        return redirect(url_for('admin', **redirect_args))
 
+        return redirect(url_for('admin', **redirect_args))
+    
     user_page = request.args.get('user_page', 1, type=int)
     task_page = request.args.get('task_page', 1, type=int)
     withdraw_page = request.args.get('withdraw_page', 1, type=int)
+    
     search_user = request.args.get('search_user', '').strip()
     search_task = request.args.get('search_task', '').strip()
     search_withdraw = request.args.get('search_withdraw', '').strip()
+
     per_page = 50
 
     with db_cursor() as conn:
         cur = conn.cursor()
+        
+        # --- USERS DATABASE SEARCH ---
         user_where = ""
         user_params = []
         if search_user:
@@ -633,16 +802,22 @@ def admin():
         total_users = cur.fetchone()[0]
         total_user_pages = max(1, (total_users + per_page - 1) // per_page)
         user_offset = (user_page - 1) * per_page
+
         users_sql = f"""
             SELECT (u.id + 100), u.full_name, u.whatsapp, u.password,
                    COALESCE(TO_CHAR(u.created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A'),
-                   u.balance, COALESCE(u.lifetime_ref_earned, 0),
+                   u.balance,
+                   COALESCE(u.lifetime_ref_earned, 0),
                    (SELECT (id + 100) FROM users WHERE id = u.referred_by)
-            FROM users u {user_where} ORDER BY u.id DESC LIMIT %s OFFSET %s
+            FROM users u
+            {user_where}
+            ORDER BY u.id DESC
+            LIMIT %s OFFSET %s
         """
         cur.execute(users_sql, user_params + [per_page, user_offset])
         all_users = cur.fetchall()
 
+        # --- TASKS DATABASE SEARCH ---
         task_where = " WHERE tasks.status != 'active' "
         task_params = []
         found_emails = []
@@ -655,7 +830,8 @@ def admin():
                 if found_emails:
                     email_conditions = " OR ".join(["tasks.email ILIKE %s" for _ in found_emails])
                     task_where += f" AND ({email_conditions}) "
-                    for em in found_emails: task_params.append(f"%{em}%")
+                    for em in found_emails:
+                        task_params.append(f"%{em}%")
                 else:
                     task_where += " AND (tasks.email ILIKE %s OR users.whatsapp ILIKE %s OR users.full_name ILIKE %s OR tasks.gid ILIKE %s) "
                     like_t = f"%{search_task}%"
@@ -665,12 +841,16 @@ def admin():
         total_tasks = cur.fetchone()[0]
         total_task_pages = max(1, (total_tasks + per_page - 1) // per_page)
         task_offset = (task_page - 1) * per_page
+
         tasks_sql = f"""
             SELECT tasks.id, users.full_name, users.whatsapp, tasks.gid, tasks.name, 
                    tasks.dob_year, tasks.email, tasks.password, tasks.price, tasks.status,
                    COALESCE(TO_CHAR(tasks.created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A'),
-                   (users.id + 100), COALESCE(tasks.is_sold, 'Not Sold')
-            FROM tasks JOIN users ON tasks.user_id = users.id {task_where}
+                   (users.id + 100),
+                   COALESCE(tasks.is_sold, 'Not Sold')
+            FROM tasks 
+            JOIN users ON tasks.user_id = users.id 
+            {task_where}
             ORDER BY (CASE WHEN tasks.status = 'pending' THEN 1 ELSE 2 END), tasks.created_at DESC 
             LIMIT %s OFFSET %s
         """
@@ -681,10 +861,12 @@ def admin():
             def get_email_index(task):
                 task_email = task[6].lower() if task[6] else ""
                 for idx, em in enumerate(found_emails):
-                    if em.lower() in task_email: return idx
+                    if em.lower() in task_email:
+                        return idx
                 return len(found_emails)
             all_tasks = sorted(all_tasks, key=get_email_index)
         
+        # --- WITHDRAWALS DATABASE SEARCH ---
         withdraw_where = ""
         withdraw_params = []
         if search_withdraw:
@@ -700,24 +882,37 @@ def admin():
         total_withdrawals = cur.fetchone()[0]
         total_withdraw_pages = max(1, (total_withdrawals + per_page - 1) // per_page)
         withdraw_offset = (withdraw_page - 1) * per_page
+
         withdraw_sql = f"""
             SELECT withdrawals.id, users.full_name, users.whatsapp, withdrawals.method, 
                    withdrawals.account_number, withdrawals.amount, withdrawals.status,
                    COALESCE(TO_CHAR(withdrawals.created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A'),
                    (users.id + 100) AS display_id
-            FROM withdrawals JOIN users ON withdrawals.user_id = users.id {withdraw_where}
+            FROM withdrawals 
+            JOIN users ON withdrawals.user_id = users.id 
+            {withdraw_where}
             ORDER BY (CASE WHEN withdrawals.status = 'pending' THEN 1 ELSE 2 END), withdrawals.created_at DESC 
             LIMIT %s OFFSET %s
         """
         cur.execute(withdraw_sql, withdraw_params + [per_page, withdraw_offset])
         all_withdrawals = cur.fetchall()
+        
         cur.close()
     
     return render_template(
-        'admin.html', tasks=all_tasks, withdrawals=all_withdrawals, users=all_users, 
-        user_page=user_page, total_user_pages=total_user_pages, task_page=task_page, 
-        total_task_pages=total_task_pages, withdraw_page=withdraw_page, total_withdraw_pages=total_withdraw_pages,
-        search_user=search_user, search_task=search_task, search_withdraw=search_withdraw
+        'admin.html', 
+        tasks=all_tasks, 
+        withdrawals=all_withdrawals, 
+        users=all_users, 
+        user_page=user_page, 
+        total_user_pages=total_user_pages,
+        task_page=task_page,
+        total_task_pages=total_task_pages,
+        withdraw_page=withdraw_page,
+        total_withdraw_pages=total_withdraw_pages,
+        search_user=search_user,
+        search_task=search_task,
+        search_withdraw=search_withdraw
     )
 
 if __name__ == '__main__':
