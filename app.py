@@ -203,11 +203,41 @@ def generate_random_task(user_id):
 def ping():
     return "OK", 200
 
+# MAIN CLEAN ROUTE FOR HOME (No /home in URL bar)
 @app.route('/')
-def index():
-    if 'user_id' in session:
-        return redirect(url_for('home'))
-    return redirect(url_for('login'))
+@app.route('/home')
+def home():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    cleanup_old_records()
+    
+    with db_cursor() as conn:
+        cur = conn.cursor()
+        
+        cur.execute("SELECT full_name, balance, status FROM users WHERE id = %s", (session['user_id'],))
+        user_info = cur.fetchone()
+        
+        cur.execute("""
+            SELECT gid, email, status 
+            FROM tasks 
+            WHERE user_id = %s AND status != 'active' 
+            ORDER BY (CASE WHEN status = 'pending' THEN 1 ELSE 2 END), created_at DESC 
+            LIMIT 6
+        """, (session['user_id'],))
+        
+        activity_rows = cur.fetchall()
+        cur.close()
+    
+    recent_activities = []
+    for row in activity_rows:
+        recent_activities.append({
+            'gid': row[0],
+            'email': row[1],
+            'status': row[2]
+        })
+    
+    return render_template('home.html', user=user_info, recent_activities=recent_activities)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -330,40 +360,6 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
-
-@app.route('/home')
-def home():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    cleanup_old_records()
-    
-    with db_cursor() as conn:
-        cur = conn.cursor()
-        
-        cur.execute("SELECT full_name, balance, status FROM users WHERE id = %s", (session['user_id'],))
-        user_info = cur.fetchone()
-        
-        cur.execute("""
-            SELECT gid, email, status 
-            FROM tasks 
-            WHERE user_id = %s AND status != 'active' 
-            ORDER BY (CASE WHEN status = 'pending' THEN 1 ELSE 2 END), created_at DESC 
-            LIMIT 6
-        """, (session['user_id'],))
-        
-        activity_rows = cur.fetchall()
-        cur.close()
-    
-    recent_activities = []
-    for row in activity_rows:
-        recent_activities.append({
-            'gid': row[0],
-            'email': row[1],
-            'status': row[2]
-        })
-    
-    return render_template('home.html', user=user_info, recent_activities=recent_activities)
 
 @app.route('/referrals')
 def referrals():
