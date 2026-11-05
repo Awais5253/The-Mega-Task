@@ -155,15 +155,6 @@ def init_db():
         ''')
         cur.execute("ALTER TABLE referral_earnings ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
         
-        # Sync initial base count for existing users (so old users stats don't start at 0)
-        cur.execute("""
-            UPDATE users u SET
-                approved_tasks_count = COALESCE((SELECT COUNT(*) FROM tasks WHERE user_id = u.id AND status = 'Approved'), u.approved_tasks_count),
-                lifetime_task_earned = COALESCE((SELECT SUM(price) FROM tasks WHERE user_id = u.id AND status = 'Approved'), u.lifetime_task_earned),
-                lifetime_ref_earned = COALESCE((SELECT SUM(amount) FROM referral_earnings WHERE referrer_id = u.id), u.lifetime_ref_earned),
-                lifetime_withdrawn = COALESCE((SELECT SUM(amount) FROM withdrawals WHERE user_id = u.id AND status = 'Approved'), u.lifetime_withdrawn)
-            WHERE u.approved_tasks_count = 0 AND u.lifetime_task_earned = 0 AND u.lifetime_ref_earned = 0 AND u.lifetime_withdrawn = 0;
-        """)
         cur.close()
 
 try:
@@ -218,8 +209,7 @@ def register():
     
     ref_db_id = None
     if ref_param.isdigit():
-        val = int(ref_param)
-        ref_db_id = val - 100 if val > 100 else val
+        ref_db_id = int(ref_param)
 
     valid_referrer_id = None
     is_valid_ref = False
@@ -382,10 +372,8 @@ def referrals():
         cur.execute("SELECT COUNT(*) FROM users WHERE referred_by = %s", (user_id,))
         total_referrals = cur.fetchone()[0]
         
-        # Lifetime total referral earnings
         ref_earnings = float(user_row[3]) if user_row and user_row[3] else 0.0
         
-        # Lifetime earnings per referred user (No 30 days restriction)
         cur.execute("""
             SELECT u.full_name, COALESCE(SUM(re.amount), 0) as earned_lifetime
             FROM users u
@@ -403,11 +391,11 @@ def referrals():
     for row in ref_rows:
         referrals_list.append({
             'username': row[0],
-            'earned_30d': row[1] # Displaying lifetime total
+            'earned_30d': row[1]
         })
         
     user_info = [user_row[0], user_row[1], user_row[2]]
-    display_id = user_row[0] + 100
+    display_id = user_row[0]
     
     return render_template(
         'referrals.html', 
@@ -498,7 +486,7 @@ def profile():
         user_phone = u_row[1] if u_row else ''
         joining_date = u_row[2] if u_row else ''
         
-        display_user_id = user_id + 100
+        display_user_id = user_id
         
         approved_tasks = u_row[3] if u_row else 0
         task_earned = float(u_row[4]) if u_row else 0.0
@@ -694,7 +682,6 @@ def admin():
                         if action == 'approve':
                             if not is_old_approved:
                                 cur.execute("UPDATE tasks SET status = 'Approved', created_at = CURRENT_TIMESTAMP WHERE id = %s", (task_id,))
-                                # Update Balance & Permanent Task Stats
                                 cur.execute("""
                                     UPDATE users SET 
                                         balance = balance + %s,
@@ -709,7 +696,6 @@ def admin():
                                     ref_row = cur.fetchone()
                                     if ref_row and ref_row[0]:
                                         referrer_id = ref_row[0]
-                                        # Update Referrer Balance & Permanent Ref Stats
                                         cur.execute("""
                                             UPDATE users SET 
                                                 balance = balance + 10,
@@ -725,7 +711,6 @@ def admin():
                             new_status = 'Not Exist' if action == 'not_exist' else 'Rejected'
                             
                             if is_old_approved:
-                                # Revert Task Balance & Permanent Task Stats
                                 cur.execute("""
                                     UPDATE users SET 
                                         balance = balance - %s,
@@ -791,7 +776,7 @@ def admin():
         user_params = []
         if search_user:
             if search_user.isdigit() and not search_user.startswith('0'):
-                user_where = " WHERE (u.id + 100) = %s "
+                user_where = " WHERE u.id = %s "
                 user_params = [int(search_user)]
             else:
                 user_where = " WHERE (u.whatsapp ILIKE %s OR u.full_name ILIKE %s) "
@@ -804,11 +789,11 @@ def admin():
         user_offset = (user_page - 1) * per_page
 
         users_sql = f"""
-            SELECT (u.id + 100), u.full_name, u.whatsapp, u.password,
+            SELECT u.id, u.full_name, u.whatsapp, u.password,
                    COALESCE(TO_CHAR(u.created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A'),
                    u.balance,
                    COALESCE(u.lifetime_ref_earned, 0),
-                   (SELECT (id + 100) FROM users WHERE id = u.referred_by)
+                   (SELECT id FROM users WHERE id = u.referred_by)
             FROM users u
             {user_where}
             ORDER BY u.id DESC
@@ -823,7 +808,7 @@ def admin():
         found_emails = []
         if search_task:
             if search_task.isdigit() and not search_task.startswith('0'):
-                task_where += " AND (users.id + 100) = %s "
+                task_where += " AND users.id = %s "
                 task_params = [int(search_task)]
             else:
                 found_emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+?\.(?:com|net|org|co|pk|info|[a-z]{2,4})', search_task, re.IGNORECASE)
@@ -846,7 +831,7 @@ def admin():
             SELECT tasks.id, users.full_name, users.whatsapp, tasks.gid, tasks.name, 
                    tasks.dob_year, tasks.email, tasks.password, tasks.price, tasks.status,
                    COALESCE(TO_CHAR(tasks.created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A'),
-                   (users.id + 100),
+                   users.id,
                    COALESCE(tasks.is_sold, 'Not Sold')
             FROM tasks 
             JOIN users ON tasks.user_id = users.id 
@@ -871,7 +856,7 @@ def admin():
         withdraw_params = []
         if search_withdraw:
             if search_withdraw.isdigit() and not search_withdraw.startswith('0'):
-                withdraw_where = " WHERE (users.id + 100) = %s "
+                withdraw_where = " WHERE users.id = %s "
                 withdraw_params = [int(search_withdraw)]
             else:
                 withdraw_where = " WHERE (users.whatsapp ILIKE %s OR withdrawals.account_number ILIKE %s OR users.full_name ILIKE %s) "
@@ -887,7 +872,7 @@ def admin():
             SELECT withdrawals.id, users.full_name, users.whatsapp, withdrawals.method, 
                    withdrawals.account_number, withdrawals.amount, withdrawals.status,
                    COALESCE(TO_CHAR(withdrawals.created_at + INTERVAL '5 hours', 'DD-Mon-YYYY HH12:MI AM'), 'N/A'),
-                   (users.id + 100) AS display_id
+                   users.id AS display_id
             FROM withdrawals 
             JOIN users ON withdrawals.user_id = users.id 
             {withdraw_where}
