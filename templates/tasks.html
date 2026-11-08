@@ -188,7 +188,7 @@
             margin-bottom: 25px;
         }
 
-        /* 15-Minute Countdown Banner Design (Video Card Theme Matched) */
+        /* 15-Minute Countdown Banner Design */
         .timer-container {
             background: linear-gradient(135deg, rgba(0, 242, 254, 0.08) 0%, rgba(30, 144, 255, 0.08) 100%);
             border: 1px solid rgba(0, 242, 254, 0.25);
@@ -308,33 +308,49 @@
         }
         .btn {
             width: 100%;
-            padding: 14px;
+            padding: 13px 16px;
             border-radius: 12px;
             font-weight: 800;
             font-size: 14px;
             border: none;
             cursor: pointer;
             text-align: center;
-            transition: transform 0.2s;
+            transition: all 0.2s ease;
             box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            letter-spacing: 0.3px;
         }
         .btn:active {
             transform: scale(0.97);
         }
+        .btn-icon {
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
         .btn-done {
-            background: linear-gradient(135deg, #2ed573 0%, #1e90ff 100%);
+            background: linear-gradient(135deg, #2ed573 0%, #10ac84 100%);
             color: #ffffff;
-            box-shadow: 0 4px 12px rgba(46, 213, 115, 0.3);
+            box-shadow: 0 4px 14px rgba(46, 213, 115, 0.25);
         }
+
         .btn-cancel {
-            background: #182238;
+            background: linear-gradient(135deg, rgba(255, 71, 87, 0.18) 0%, rgba(255, 71, 87, 0.08) 100%);
+            border: 1px solid rgba(255, 71, 87, 0.45);
             color: #ff4757;
-            border: 1px solid rgba(255, 71, 87, 0.3);
+            box-shadow: 0 4px 12px rgba(255, 71, 87, 0.15);
         }
+
         .btn-new {
             background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
             color: #ffffff;
-            box-shadow: 0 4px 12px rgba(0, 198, 255, 0.3);
+            box-shadow: 0 4px 14px rgba(0, 198, 255, 0.25);
         }
         .btn-start-card {
             background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
@@ -395,7 +411,7 @@
         <!-- 4. YOUR DATA HEADING -->
         <div class="section-heading">Your Data</div>
 
-        <!-- 5. LIVE 15-MINUTE COUNTDOWN TIMER (DIRECTLY UNDER YOUR DATA) -->
+        <!-- 5. LIVE 15-MINUTE COUNTDOWN TIMER -->
         <div class="timer-container" id="timerContainer">
             <div class="timer-left-label" id="timerLeftLabel">
                 <span>⏳ TIME REMAINING</span>
@@ -444,16 +460,25 @@
             <div class="btn-row">
                 <form method="POST" style="flex:1;">
                     <input type="hidden" name="action" value="done">
-                    <button type="submit" class="btn btn-done">✅ Done</button>
+                    <button type="submit" class="btn btn-done">
+                        <span class="btn-icon">✅</span>
+                        <span>Done</span>
+                    </button>
                 </form>
                 <form method="POST" style="flex:1;">
                     <input type="hidden" name="action" value="cancel">
-                    <button type="submit" class="btn btn-cancel">❌ Cancel</button>
+                    <button type="submit" class="btn btn-cancel">
+                        <span class="btn-icon">❌</span>
+                        <span>Cancel</span>
+                    </button>
                 </form>
             </div>
             <form method="POST">
                 <input type="hidden" name="action" value="start_new">
-                <button type="submit" class="btn btn-new">🔄 New Task</button>
+                <button type="submit" class="btn btn-new">
+                    <span class="btn-icon">🔄</span>
+                    <span>New Task</span>
+                </button>
             </form>
         </div>
     </div>
