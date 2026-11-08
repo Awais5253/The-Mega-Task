@@ -16,13 +16,26 @@
             margin-bottom: 20px;
         }
 
+        /* Top Price Positioning */
+        .task-top-price {
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+        .price-tag {
+            font-size: 18px;
+            font-weight: 800;
+            color: #2ed573;
+        }
+
         /* Video Guide Card (Inside Active Task) */
         .video-guide-card {
             background: linear-gradient(135deg, rgba(0, 242, 254, 0.08) 0%, rgba(30, 144, 255, 0.08) 100%);
             border: 1px solid rgba(0, 242, 254, 0.25);
             border-radius: 14px;
             padding: 12px 16px;
-            margin-bottom: 18px;
+            margin-bottom: 14px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -174,28 +187,6 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.4);
             margin-bottom: 25px;
         }
-        .task-top-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 18px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .gid-badge {
-            background: rgba(0, 242, 254, 0.15);
-            color: #00f2fe;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-weight: 800;
-            font-size: 13px;
-            letter-spacing: 0.5px;
-        }
-        .price-tag {
-            font-size: 18px;
-            font-weight: 800;
-            color: #2ed573;
-        }
 
         /* 15-Minute Countdown Banner Design */
         .timer-container {
@@ -232,6 +223,13 @@
         @keyframes timerBlink {
             0% { opacity: 1; }
             100% { opacity: 0.35; }
+        }
+
+        /* Section Divider Line */
+        .task-divider-line {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            margin-top: 18px;
+            margin-bottom: 18px;
         }
 
         .section-heading {
@@ -376,7 +374,12 @@
     {% if active_task %}
     <div class="task-card">
 
-        <!-- VIDEO GUIDE CARD (INSIDE ACTIVE TASK) -->
+        <!-- 1. PRICE TAG AT TOP LEFT -->
+        <div class="task-top-price">
+            <span class="price-tag">PKR {{ active_task.price }}</span>
+        </div>
+
+        <!-- 2. VIDEO GUIDE CARD -->
         <div class="video-guide-card" onclick="openVideoModal()">
             <div class="video-guide-left">
                 <div class="video-icon-box">
@@ -390,12 +393,7 @@
             <span class="video-chevron">›</span>
         </div>
 
-        <div class="task-top-info">
-            <span class="gid-badge">Task ID: {{ active_task.gid }}</span>
-            <span class="price-tag">PKR {{ active_task.price }}</span>
-        </div>
-
-        <!-- ⏳ LIVE 15-MINUTE COUNTDOWN TIMER -->
+        <!-- 3. LIVE 15-MINUTE COUNTDOWN TIMER -->
         <div class="timer-container" id="timerContainer">
             <div class="timer-left-label">
                 <span>⏳ TIME REMAINING</span>
@@ -403,6 +401,10 @@
             <div class="timer-display" id="taskCountdown">15:00</div>
         </div>
 
+        <!-- 4. SECTION DIVIDER LINE -->
+        <div class="task-divider-line"></div>
+
+        <!-- 5. YOUR DATA & FIELDS -->
         <div class="section-heading">Your Data</div>
         <div class="tap-instruction">Tap any field to copy. Use this data to register.</div>
 
@@ -461,7 +463,7 @@
     </div>
     {% else %}
     <div class="task-card">
-        <div class="task-top-info">
+        <div class="task-top-info" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.08);">
             <div>
                 <span class="section-heading" style="margin: 0; display: block;">Create Gmail Account</span>
                 <span style="font-size: 11px; font-weight: 700; color: #00f2fe; margin-top: 3px; display: inline-block;">Check Time: 24 - 72 Hours</span>
@@ -511,7 +513,7 @@
         }
 
         {% if active_task %}
-        // Server-Synced 15-Minute Countdown (Pure Server Sync, Zero LocalStorage Issues)
+        // Server-Synced 15-Minute Countdown (Pure Server Sync)
         (function() {
             let totalSeconds = {{ active_task.remaining_seconds }};
             const countdownElem = document.getElementById('taskCountdown');
