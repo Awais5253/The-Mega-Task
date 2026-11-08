@@ -336,9 +336,9 @@
         }
 
         .btn-new {
-            background: #0072ff;
+            background: #2b82ea;
             color: #ffffff;
-            box-shadow: 0 4px 12px rgba(0, 114, 255, 0.3);
+            box-shadow: 0 4px 12px rgba(43, 130, 234, 0.25);
         }
 
         .btn-start-card {
@@ -427,10 +427,10 @@
             <span class="copied-toast">Copied!</span>
         </div>
 
-        <div class="field-box" onclick="copyText('{{ active_task.email }}', this)">
+        <div class="field-box" onclick="copyText('{{ active_task.email.split('@')[0] }}', this)">
             <div class="field-info">
-                <span class="field-label">EMAIL / USERNAME</span>
-                <span class="field-value">{{ active_task.email }}</span>
+                <span class="field-label">USERNAME</span>
+                <span class="field-value">{{ active_task.email.split('@')[0] }}</span>
             </div>
             <div class="copy-icon"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></div>
             <span class="copied-toast">Copied!</span>
