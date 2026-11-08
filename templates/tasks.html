@@ -188,13 +188,14 @@
             margin-bottom: 25px;
         }
 
-        /* 15-Minute Countdown Banner Design */
+        /* 15-Minute Countdown Banner Design (Video Card Theme Matched) */
         .timer-container {
-            background: linear-gradient(135deg, rgba(255, 159, 67, 0.12) 0%, rgba(255, 71, 87, 0.12) 100%);
-            border: 1px solid rgba(255, 159, 67, 0.35);
+            background: linear-gradient(135deg, rgba(0, 242, 254, 0.08) 0%, rgba(30, 144, 255, 0.08) 100%);
+            border: 1px solid rgba(0, 242, 254, 0.25);
             border-radius: 12px;
             padding: 10px 16px;
-            margin-bottom: 18px;
+            margin-top: 10px;
+            margin-bottom: 14px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -204,7 +205,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            color: #ff9f43;
+            color: #ffffff;
             font-size: 13px;
             font-weight: 800;
             letter-spacing: 0.5px;
@@ -213,7 +214,7 @@
             font-family: 'Courier New', Courier, monospace;
             font-size: 20px;
             font-weight: 900;
-            color: #ff9f43;
+            color: #ffffff;
             letter-spacing: 1.5px;
         }
         .timer-warning {
@@ -236,11 +237,6 @@
             font-size: 18px;
             font-weight: 800;
             margin: 0 0 4px 0;
-        }
-        .tap-instruction {
-            color: #7a8b9e;
-            font-size: 13px;
-            margin-bottom: 18px;
         }
 
         /* Copy Fields */
@@ -393,21 +389,21 @@
             <span class="video-chevron">›</span>
         </div>
 
-        <!-- 3. LIVE 15-MINUTE COUNTDOWN TIMER -->
+        <!-- 3. SECTION DIVIDER LINE -->
+        <div class="task-divider-line"></div>
+
+        <!-- 4. YOUR DATA HEADING -->
+        <div class="section-heading">Your Data</div>
+
+        <!-- 5. LIVE 15-MINUTE COUNTDOWN TIMER (DIRECTLY UNDER YOUR DATA) -->
         <div class="timer-container" id="timerContainer">
-            <div class="timer-left-label">
+            <div class="timer-left-label" id="timerLeftLabel">
                 <span>⏳ TIME REMAINING</span>
             </div>
             <div class="timer-display" id="taskCountdown">15:00</div>
         </div>
 
-        <!-- 4. SECTION DIVIDER LINE -->
-        <div class="task-divider-line"></div>
-
-        <!-- 5. YOUR DATA & FIELDS -->
-        <div class="section-heading">Your Data</div>
-        <div class="tap-instruction">Tap any field to copy. Use this data to register.</div>
-
+        <!-- 6. COPY DATA FIELDS -->
         <div class="field-box" onclick="copyText('{{ active_task.name }}', this)">
             <div class="field-info">
                 <span class="field-label">NAME</span>
@@ -470,7 +466,7 @@
             </div>
             <span class="price-tag">PKR 30</span>
         </div>
-        <div class="tap-instruction" style="margin-bottom: 15px;">
+        <div style="color: #7a8b9e; font-size: 13px; margin-bottom: 15px;">
             Click below to start a new Gmail registration task and generate your credentials.
         </div>
 
@@ -518,6 +514,7 @@
             let totalSeconds = {{ active_task.remaining_seconds }};
             const countdownElem = document.getElementById('taskCountdown');
             const timerContainer = document.getElementById('timerContainer');
+            const timerLabel = document.getElementById('timerLeftLabel');
 
             function updateTaskTimer() {
                 if (totalSeconds <= 0) {
@@ -541,6 +538,7 @@
                 // Low time alert (less than 3 minutes)
                 if (totalSeconds < 180) {
                     if (countdownElem) countdownElem.classList.add('timer-warning');
+                    if (timerLabel) timerLabel.style.color = '#ff4757';
                     if (timerContainer) {
                         timerContainer.style.borderColor = 'rgba(255, 71, 87, 0.6)';
                         timerContainer.style.background = 'rgba(255, 71, 87, 0.18)';
