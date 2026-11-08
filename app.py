@@ -571,19 +571,28 @@ def tasks():
 
     with db_cursor() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT gid, name, dob_year, email, password, price FROM tasks WHERE user_id = %s AND status = 'active'", (user_id,))
+        cur.execute("""
+            SELECT gid, name, dob_year, email, password, price,
+                   EXTRACT(EPOCH FROM (NOW() - created_at)) as elapsed
+            FROM tasks 
+            WHERE user_id = %s AND status = 'active'
+        """, (user_id,))
         active_row = cur.fetchone()
         cur.close()
     
     active_task = None
     if active_row:
+        elapsed = int(active_row[6]) if active_row[6] is not None else 0
+        remaining_seconds = max(0, 900 - elapsed)
+        
         active_task = {
             'gid': active_row[0],
             'name': active_row[1],
             'dob_year': active_row[2],
             'email': active_row[3],
             'password': active_row[4],
-            'price': active_row[5]
+            'price': active_row[5],
+            'remaining_seconds': remaining_seconds
         }
         
     return render_template('tasks.html', active_task=active_task)
