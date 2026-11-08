@@ -538,12 +538,13 @@ def tasks():
     
     user_id = session['user_id']
     
+    # Clean up active tasks older than 14 minutes 50 seconds
     with db_cursor() as conn:
         cur = conn.cursor()
         cur.execute("""
             DELETE FROM tasks 
             WHERE user_id = %s AND status = 'active' 
-            AND created_at < NOW() - INTERVAL '30 minutes'
+            AND created_at < NOW() - INTERVAL '14 minutes 50 seconds'
         """, (user_id,))
         cur.close()
     
