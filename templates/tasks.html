@@ -511,38 +511,23 @@
         }
 
         {% if active_task %}
-        // 15-Minute Task Countdown Logic (LocalStorage Persisted)
+        // Server-Synced 15-Minute Countdown (Pure Server Sync, Zero LocalStorage Issues)
         (function() {
-            const taskId = "{{ active_task.gid }}";
-            const storageKey = 'megatask_timer_end_' + taskId;
-            let endTime = localStorage.getItem(storageKey);
-
-            if (!endTime) {
-                // Set 15 minutes (900,000 milliseconds) from current time
-                endTime = Date.now() + (15 * 60 * 1000);
-                localStorage.setItem(storageKey, endTime);
-            } else {
-                endTime = parseInt(endTime, 10);
-            }
-
+            let totalSeconds = {{ active_task.remaining_seconds }};
             const countdownElem = document.getElementById('taskCountdown');
             const timerContainer = document.getElementById('timerContainer');
 
             function updateTaskTimer() {
-                const now = Date.now();
-                const diff = endTime - now;
-
-                if (diff <= 0) {
+                if (totalSeconds <= 0) {
                     clearInterval(timerInterval);
-                    localStorage.removeItem(storageKey);
                     if (countdownElem) countdownElem.textContent = "00:00";
                     alert("⏳ Task Time Expired! Refreshing page...");
                     window.location.reload();
                     return;
                 }
 
-                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
 
                 const minStr = minutes < 10 ? '0' + minutes : minutes;
                 const secStr = seconds < 10 ? '0' + seconds : seconds;
@@ -552,13 +537,15 @@
                 }
 
                 // Low time alert (less than 3 minutes)
-                if (diff < 180000) {
+                if (totalSeconds < 180) {
                     if (countdownElem) countdownElem.classList.add('timer-warning');
                     if (timerContainer) {
                         timerContainer.style.borderColor = 'rgba(255, 71, 87, 0.6)';
                         timerContainer.style.background = 'rgba(255, 71, 87, 0.18)';
                     }
                 }
+
+                totalSeconds--;
             }
 
             updateTaskTimer();
