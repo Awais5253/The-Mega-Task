@@ -90,6 +90,9 @@ def init_db():
     with db_cursor() as conn:
         cur = conn.cursor()
         
+        # Create Sequence for Fail-Safe Unique GIDs
+        cur.execute("CREATE SEQUENCE IF NOT EXISTS task_gid_seq START WITH 15;")
+        
         cur.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -178,9 +181,11 @@ def generate_random_task(user_id):
     
     with db_cursor() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM tasks")
-        total_count = cur.fetchone()[0] + 1
-        gid = f"G{total_count}"
+        
+        # Get strictly incrementing sequence value for GID
+        cur.execute("SELECT nextval('task_gid_seq')")
+        seq_num = cur.fetchone()[0]
+        gid = f"G{seq_num}"
         
         cur.execute("DELETE FROM tasks WHERE user_id = %s AND status = 'active'", (user_id,))
         
