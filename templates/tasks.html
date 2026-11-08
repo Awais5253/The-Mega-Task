@@ -308,50 +308,39 @@
         }
         .btn {
             width: 100%;
-            padding: 13px 16px;
+            padding: 14px;
             border-radius: 12px;
             font-weight: 800;
             font-size: 14px;
             border: none;
             cursor: pointer;
             text-align: center;
-            transition: all 0.2s ease;
+            transition: transform 0.2s;
             box-sizing: border-box;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            letter-spacing: 0.3px;
+            color: #ffffff;
         }
         .btn:active {
             transform: scale(0.97);
         }
-        .btn-icon {
-            font-size: 14px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1;
-        }
 
         .btn-done {
-            background: linear-gradient(135deg, #2ed573 0%, #10ac84 100%);
+            background: #2ed573;
             color: #ffffff;
-            box-shadow: 0 4px 14px rgba(46, 213, 115, 0.25);
+            box-shadow: 0 4px 12px rgba(46, 213, 115, 0.3);
         }
 
         .btn-cancel {
-            background: linear-gradient(135deg, rgba(255, 71, 87, 0.18) 0%, rgba(255, 71, 87, 0.08) 100%);
-            border: 1px solid rgba(255, 71, 87, 0.45);
-            color: #ff4757;
-            box-shadow: 0 4px 12px rgba(255, 71, 87, 0.15);
+            background: #ff4757;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(255, 71, 87, 0.3);
         }
 
         .btn-new {
-            background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+            background: #0072ff;
             color: #ffffff;
-            box-shadow: 0 4px 14px rgba(0, 198, 255, 0.25);
+            box-shadow: 0 4px 12px rgba(0, 114, 255, 0.3);
         }
+
         .btn-start-card {
             background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
             color: #090d16;
@@ -460,25 +449,16 @@
             <div class="btn-row">
                 <form method="POST" style="flex:1;">
                     <input type="hidden" name="action" value="done">
-                    <button type="submit" class="btn btn-done">
-                        <span class="btn-icon">✅</span>
-                        <span>Done</span>
-                    </button>
+                    <button type="submit" class="btn btn-done">Done</button>
                 </form>
                 <form method="POST" style="flex:1;">
                     <input type="hidden" name="action" value="cancel">
-                    <button type="submit" class="btn btn-cancel">
-                        <span class="btn-icon">❌</span>
-                        <span>Cancel</span>
-                    </button>
+                    <button type="submit" class="btn btn-cancel">Cancel</button>
                 </form>
             </div>
             <form method="POST">
                 <input type="hidden" name="action" value="start_new">
-                <button type="submit" class="btn btn-new">
-                    <span class="btn-icon">🔄</span>
-                    <span>New Task</span>
-                </button>
+                <button type="submit" class="btn btn-new">🔄 New Task</button>
             </form>
         </div>
     </div>
