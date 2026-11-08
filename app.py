@@ -538,13 +538,13 @@ def tasks():
     
     user_id = session['user_id']
     
-    # Clean up active tasks older than 14 minutes 50 seconds
+    # Timezone-independent epoch cleanup (890 seconds = ~14 min 50 sec)
     with db_cursor() as conn:
         cur = conn.cursor()
         cur.execute("""
             DELETE FROM tasks 
             WHERE user_id = %s AND status = 'active' 
-            AND created_at < NOW() - INTERVAL '14 minutes 50 seconds'
+            AND EXTRACT(EPOCH FROM (NOW() - created_at)) >= 890
         """, (user_id,))
         cur.close()
     
