@@ -16,17 +16,26 @@
             margin-bottom: 20px;
         }
 
-        /* Top Price Positioning */
+        /* Top Price Positioning & Stylish Curved Badge Box */
         .task-top-price {
-            margin-bottom: 14px;
+            margin-bottom: 16px;
             display: flex;
             align-items: center;
             justify-content: flex-start;
+            margin-left: 4px; /* Pulls slightly right for perfect visual alignment */
         }
         .price-tag {
-            font-size: 18px;
-            font-weight: 800;
+            font-size: 20px;
+            font-weight: 900;
             color: #2ed573;
+            background: linear-gradient(135deg, rgba(46, 213, 115, 0.16) 0%, rgba(46, 213, 115, 0.05) 100%);
+            border: 1px solid rgba(46, 213, 115, 0.35);
+            padding: 7px 18px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 14px rgba(46, 213, 115, 0.15);
         }
 
         /* Video Guide Card (Inside Active Task) */
@@ -374,7 +383,7 @@
     {% if active_task %}
     <div class="task-card">
 
-        <!-- 1. PRICE TAG AT TOP LEFT -->
+        <!-- 1. PRICE TAG AT TOP LEFT (IN CURVED BADGE BOX) -->
         <div class="task-top-price">
             <span class="price-tag">PKR {{ active_task.price }}</span>
         </div>
