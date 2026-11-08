@@ -197,6 +197,43 @@
             color: #2ed573;
         }
 
+        /* 15-Minute Countdown Banner Design */
+        .timer-container {
+            background: linear-gradient(135deg, rgba(255, 159, 67, 0.12) 0%, rgba(255, 71, 87, 0.12) 100%);
+            border: 1px solid rgba(255, 159, 67, 0.35);
+            border-radius: 12px;
+            padding: 10px 16px;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+        .timer-left-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ff9f43;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+        .timer-display {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 20px;
+            font-weight: 900;
+            color: #ff9f43;
+            letter-spacing: 1.5px;
+        }
+        .timer-warning {
+            color: #ff4757 !important;
+            animation: timerBlink 1s infinite alternate;
+        }
+        @keyframes timerBlink {
+            0% { opacity: 1; }
+            100% { opacity: 0.35; }
+        }
+
         .section-heading {
             font-size: 18px;
             font-weight: 800;
@@ -358,6 +395,14 @@
             <span class="price-tag">PKR {{ active_task.price }}</span>
         </div>
 
+        <!-- ⏳ LIVE 15-MINUTE COUNTDOWN TIMER -->
+        <div class="timer-container" id="timerContainer">
+            <div class="timer-left-label">
+                <span>⏳ TIME REMAINING</span>
+            </div>
+            <div class="timer-display" id="taskCountdown">15:00</div>
+        </div>
+
         <div class="section-heading">Your Data</div>
         <div class="tap-instruction">Tap any field to copy. Use this data to register.</div>
 
@@ -464,5 +509,61 @@
             player.currentTime = 0;
             document.getElementById('videoModal').style.display = 'none';
         }
+
+        {% if active_task %}
+        // 15-Minute Task Countdown Logic (LocalStorage Persisted)
+        (function() {
+            const taskId = "{{ active_task.gid }}";
+            const storageKey = 'megatask_timer_end_' + taskId;
+            let endTime = localStorage.getItem(storageKey);
+
+            if (!endTime) {
+                // Set 15 minutes (900,000 milliseconds) from current time
+                endTime = Date.now() + (15 * 60 * 1000);
+                localStorage.setItem(storageKey, endTime);
+            } else {
+                endTime = parseInt(endTime, 10);
+            }
+
+            const countdownElem = document.getElementById('taskCountdown');
+            const timerContainer = document.getElementById('timerContainer');
+
+            function updateTaskTimer() {
+                const now = Date.now();
+                const diff = endTime - now;
+
+                if (diff <= 0) {
+                    clearInterval(timerInterval);
+                    localStorage.removeItem(storageKey);
+                    if (countdownElem) countdownElem.textContent = "00:00";
+                    alert("⏳ Task Time Expired! Refreshing page...");
+                    window.location.reload();
+                    return;
+                }
+
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                const minStr = minutes < 10 ? '0' + minutes : minutes;
+                const secStr = seconds < 10 ? '0' + seconds : seconds;
+
+                if (countdownElem) {
+                    countdownElem.textContent = `${minStr}:${secStr}`;
+                }
+
+                // Low time alert (less than 3 minutes)
+                if (diff < 180000) {
+                    if (countdownElem) countdownElem.classList.add('timer-warning');
+                    if (timerContainer) {
+                        timerContainer.style.borderColor = 'rgba(255, 71, 87, 0.6)';
+                        timerContainer.style.background = 'rgba(255, 71, 87, 0.18)';
+                    }
+                }
+            }
+
+            updateTaskTimer();
+            const timerInterval = setInterval(updateTaskTimer, 1000);
+        })();
+        {% endif %}
     </script>
 {% endblock %}
