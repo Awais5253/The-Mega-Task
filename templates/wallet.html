@@ -9,7 +9,6 @@
         background: #121827;
         border-radius: 20px;
         padding: 24px 20px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
         border-top: 2px solid rgba(0, 242, 254, 0.4);
         box-shadow: 0 10px 25px rgba(0,0,0,0.4);
         margin-bottom: 22px;
@@ -51,7 +50,6 @@
         background: #121827;
         border-radius: 18px;
         padding: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
         margin-bottom: 25px;
     }
     .card-title {
@@ -75,11 +73,12 @@
         width: 100%;
         padding: 12px;
         background: #0d1322;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid transparent;
         border-radius: 10px;
         color: #ffffff;
         font-size: 14px;
         box-sizing: border-box;
+        transition: border-color 0.2s ease;
     }
     select:focus, input:focus {
         outline: none;
@@ -110,8 +109,8 @@
         margin-bottom: 15px;
         font-weight: 600;
     }
-    .alert-success { background: rgba(46, 213, 115, 0.2); color: #2ed573; border: 1px solid #2ed573; }
-    .alert-danger { background: rgba(255, 71, 87, 0.2); color: #ff4757; border: 1px solid #ff4757; }
+    .alert-success { background: rgba(46, 213, 115, 0.2); color: #2ed573; }
+    .alert-danger { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
 
     .history-item {
         background: #0d1322;
@@ -121,7 +120,6 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border: 1px solid rgba(255, 255, 255, 0.05);
     }
     .h-status {
         font-size: 11px;
